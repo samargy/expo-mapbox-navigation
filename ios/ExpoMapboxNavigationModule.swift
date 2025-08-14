@@ -70,6 +70,51 @@ public class ExpoMapboxNavigationModule: Module {
       AsyncFunction("recenterMap") { (view: ExpoMapboxNavigationView) in
         view.controller.recenterMap()
       }
+
+      // Debug Bridge Methods
+      AsyncFunction("getDebugState") { (view: ExpoMapboxNavigationView) -> [String: Any] in
+        return [
+          "navigationState": view.controller.navigationState,
+          "lastError": view.controller.lastError ?? NSNull(),
+          "initCount": view.controller.initializationCount,
+          "cleanupCount": view.controller.cleanupCount,
+          "routeCalcCount": view.controller.routeCalculationCount,
+          "viewState": view.controller.viewLifecycleState,
+          "providerStatus": view.controller.getProviderStatus(),
+          "sessionStatus": view.controller.getSessionStatus(),
+          "memoryWarnings": view.controller.memoryWarningCount,
+          "providerInstanceHash": view.controller.providerInstanceHash
+        ]
+      }
+
+      AsyncFunction("getDebugLogs") { (view: ExpoMapboxNavigationView) -> [String] in
+        return view.controller.debugLog
+      }
+
+      AsyncFunction("clearDebugLogs") { (view: ExpoMapboxNavigationView) -> Void in
+        view.controller.debugLog.removeAll()
+        view.controller.addDebugLog("Debug logs cleared")
+      }
+
+      AsyncFunction("forceCleanup") { (view: ExpoMapboxNavigationView) -> String in
+        view.controller.forceCleanup()
+        return "Cleanup initiated"
+      }
+
+      AsyncFunction("getNavigationProviderInfo") { (view: ExpoMapboxNavigationView) -> [String: Any] in
+        return [
+          "isStatic": true, // Since it's currently static
+          "instanceHash": view.controller.providerInstanceHash,
+          "hasActiveNavigation": view.controller.navigation != nil,
+          "hasTripSession": view.controller.tripSession != nil,
+          "hasNavigationView": view.controller.navigationViewController != nil
+        ]
+      }
+
+      AsyncFunction("testRouteCalculation") { (view: ExpoMapboxNavigationView, coords: [[Double]]) -> String in
+        view.controller.testRouteCalculation(coords)
+        return "Route calculation test initiated"
+      }
     }
   }
 }

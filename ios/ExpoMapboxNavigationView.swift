@@ -59,6 +59,17 @@ class ExpoMapboxNavigationViewController: UIViewController {
     var vehicleMaxHeight: Double? = nil
     var vehicleMaxWidth: Double? = nil
 
+    // Debug state tracking
+    var debugLog: [String] = []
+    var navigationState: String = "idle"
+    var lastError: String? = nil
+    var initializationCount: Int = 0
+    var cleanupCount: Int = 0
+    var routeCalculationCount: Int = 0
+    var viewLifecycleState: String = "unknown"
+    var memoryWarningCount: Int = 0
+    var providerInstanceHash: String = ""
+
     var onRouteProgressChanged: EventDispatcher? = nil
     var onCancelNavigation: EventDispatcher? = nil
     var onWaypointArrival: EventDispatcher? = nil
@@ -74,12 +85,84 @@ class ExpoMapboxNavigationViewController: UIViewController {
     private var reroutingCancellable: AnyCancellable? = nil
     private var sessionCancellable: AnyCancellable? = nil
 
+    // Debug helper methods
+    func addDebugLog(_ message: String) {
+        let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+        let logEntry = "[\(timestamp)] \(message)"
+        debugLog.append(logEntry)
+        
+        // Keep only last 100 entries to prevent memory buildup
+        if debugLog.count > 100 {
+            debugLog.removeFirst()
+        }
+        
+        // Also log to console for immediate debugging
+        print("[Navigation Debug] \(logEntry)")
+    }
+    
+    func getProviderStatus() -> String {
+        return "static_provider_active"
+    }
+    
+    func getSessionStatus() -> String {
+        guard let session = tripSession?.session else { return "no_session" }
+        return "\(session)"
+    }
+    
+    func forceCleanup() {
+        addDebugLog("forceCleanup() called")
+        cleanupCount += 1
+        navigationState = "force_cleaning"
+        
+        // Force stop active guidance
+        Task { @MainActor in 
+            tripSession?.setToIdle()
+            navigationState = "idle"
+            addDebugLog("Force cleanup completed")
+        }
+    }
+    
+    func testRouteCalculation(_ coordinates: [[Double]]) {
+        addDebugLog("testRouteCalculation called with \(coordinates.count) coordinates")
+        routeCalculationCount += 1
+        
+        // Convert coordinates and test route calculation
+        let testCoordinates = coordinates.map { coord in
+            CLLocationCoordinate2D(latitude: coord[1], longitude: coord[0])
+        }
+        
+        let waypoints = testCoordinates.map { Waypoint(coordinate: $0) }
+        let routeOptions = NavigationRouteOptions(waypoints: waypoints)
+        
+        Task {
+            do {
+                addDebugLog("Starting test route calculation")
+                let routes = try await routingProvider!.calculateRoutes(options: routeOptions).value
+                addDebugLog("Test route calculation succeeded: \(routes.count) routes")
+            } catch {
+                addDebugLog("Test route calculation failed: \(error.localizedDescription)")
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
     init() {
         super.init(nibName: nil, bundle: nil)
+        
+        // Debug: Track initialization
+        initializationCount += 1
+        viewLifecycleState = "initializing"
+        providerInstanceHash = String(describing: Unmanaged.passUnretained(ExpoMapboxNavigationViewController.navigationProvider).toOpaque())
+        addDebugLog("ExpoMapboxNavigationViewController initialized #\(initializationCount)")
+        addDebugLog("Provider instance hash: \(providerInstanceHash)")
+        
         mapboxNavigation = ExpoMapboxNavigationViewController.navigationProvider.mapboxNavigation
         routingProvider = mapboxNavigation!.routingProvider()
         navigation = mapboxNavigation!.navigation()
         tripSession = mapboxNavigation!.tripSession()
+        
+        navigationState = "initialized"
+        addDebugLog("Navigation components initialized")
 
         routeProgressCancellable = navigation!.routeProgress.sink { progressState in
             if(progressState != nil){
@@ -121,15 +204,36 @@ class ExpoMapboxNavigationViewController: UIViewController {
     }
 
     deinit {
+        addDebugLog("ExpoMapboxNavigationViewController deinit called")
+        viewLifecycleState = "deinitializing"
+        
         routeProgressCancellable?.cancel()
         waypointArrivalCancellable?.cancel()
         reroutingCancellable?.cancel()
         sessionCancellable?.cancel()
+        
+        addDebugLog("ExpoMapboxNavigationViewController deinit completed")
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        Task { @MainActor in tripSession?.setToIdle() } // Stops navigation
+        
+        addDebugLog("viewDidDisappear called (animated: \(animated))")
+        viewLifecycleState = "disappeared"
+        cleanupCount += 1
+        navigationState = "cleaning_up"
+        
+        Task { @MainActor in 
+            tripSession?.setToIdle() // Stops navigation
+            navigationState = "idle"
+            addDebugLog("Navigation stopped via viewDidDisappear")
+        }
+    }
+    
+    override func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        memoryWarningCount += 1
+        addDebugLog("Memory warning received (count: \(memoryWarningCount))")
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -228,6 +332,10 @@ class ExpoMapboxNavigationViewController: UIViewController {
     }
 
     func calculateRoutes(waypoints: Array<Waypoint>){
+        addDebugLog("calculateRoutes() called with \(waypoints.count) waypoints")
+        routeCalculationCount += 1
+        navigationState = "calculating_route"
+        
         let routeOptions = NavigationRouteOptions(
             waypoints: waypoints, 
             profileIdentifier: currentRouteProfile != nil ? ProfileIdentifier(rawValue: currentRouteProfile!) : nil,
@@ -241,19 +349,29 @@ class ExpoMapboxNavigationViewController: UIViewController {
         )
 
         calculateRoutesTask = Task {
+            addDebugLog("Starting route calculation")
             switch await self.routingProvider!.calculateRoutes(options: routeOptions).result {
             case .failure(let error):
+                addDebugLog("Route calculation failed: \(error.localizedDescription)")
+                lastError = error.localizedDescription
+                navigationState = "route_error"
                 onRouteFailedToLoad?([
                     "errorMessage": error.localizedDescription
                 ])
                 print(error.localizedDescription)
             case .success(let navigationRoutes):
+                addDebugLog("Route calculation succeeded: \(navigationRoutes.mainRoute.route.legs.count) legs")
+                navigationState = "route_calculated"
                 onRoutesCalculated(navigationRoutes: navigationRoutes)
             }
         }
     }
 
     func calculateMapMatchingRoutes(waypoints: Array<Waypoint>){
+        addDebugLog("calculateMapMatchingRoutes() called with \(waypoints.count) waypoints")
+        routeCalculationCount += 1
+        navigationState = "calculating_map_matching_route"
+        
         let matchOptions = NavigationMatchOptions(
             waypoints: waypoints, 
             profileIdentifier: currentRouteProfile != nil ? ProfileIdentifier(rawValue: currentRouteProfile!) : nil,
@@ -264,13 +382,19 @@ class ExpoMapboxNavigationViewController: UIViewController {
 
 
         calculateRoutesTask = Task {
+            addDebugLog("Starting map matching route calculation")
             switch await self.routingProvider!.calculateRoutes(options: matchOptions).result {
             case .failure(let error):
+                addDebugLog("Map matching route calculation failed: \(error.localizedDescription)")
+                lastError = error.localizedDescription
+                navigationState = "route_error"
                 onRouteFailedToLoad?([
                     "errorMessage": error.localizedDescription
                 ])
                 print(error.localizedDescription)
             case .success(let navigationRoutes):
+                addDebugLog("Map matching route calculation succeeded: \(navigationRoutes.mainRoute.route.legs.count) legs")
+                navigationState = "route_calculated"
                 onRoutesCalculated(navigationRoutes: navigationRoutes)
             }
         }
@@ -312,6 +436,9 @@ class ExpoMapboxNavigationViewController: UIViewController {
     }
 
     func onRoutesCalculated(navigationRoutes: NavigationRoutes){
+        addDebugLog("onRoutesCalculated called - starting navigation UI setup")
+        navigationState = "setting_up_navigation"
+        
         onRoutesLoaded?([
             "routes": [
                 "mainRoute": convertRoute(route: navigationRoutes.mainRoute.route),
@@ -382,6 +509,10 @@ class ExpoMapboxNavigationViewController: UIViewController {
         ])
         didMove(toParent: self)
         mapboxNavigation!.tripSession().startActiveGuidance(with: navigationRoutes, startLegIndex: 0)
+        
+        navigationState = "active_navigation"
+        addDebugLog("Active guidance started - navigation setup complete")
+        viewLifecycleState = "navigating"
     }
 }
 extension ExpoMapboxNavigationViewController: NavigationViewControllerDelegate {
