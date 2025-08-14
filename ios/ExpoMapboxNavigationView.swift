@@ -138,7 +138,7 @@ class ExpoMapboxNavigationViewController: UIViewController {
             do {
                 addDebugLog("Starting test route calculation")
                 let routes = try await routingProvider!.calculateRoutes(options: routeOptions).value
-                addDebugLog("Test route calculation succeeded: \(routes.count) routes")
+                addDebugLog("Test route calculation succeeded: 1 main + \(routes.alternativeRoutes.count) alternatives")
             } catch {
                 addDebugLog("Test route calculation failed: \(error.localizedDescription)")
                 lastError = error.localizedDescription
