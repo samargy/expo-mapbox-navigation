@@ -2,26 +2,6 @@ apply plugin: 'com.android.library'
 apply plugin: 'kotlin-android'
 apply plugin: 'maven-publish'
 
-// Force all transitive Mapbox dependencies to resolve to the NDK27 variant.
-// This is necessary to align with @rnmapbox/maps, which automatically selects
-// this variant when targeting modern Android SDKs (35+), preventing a
-// duplicate class collision between the 'android' and 'android-ndk27' artifacts.
-configurations.all {
-    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
-        def requested = details.requested
-        def group = requested.group
-        def name = requested.name
-
-        // List of Mapbox dependency groups that have ndk27 variants we need to align.
-        def groupsToAlign = ['com.mapbox.maps', 'com.mapbox.plugin', 'com.mapbox.module']
-
-        if (group in groupsToAlign && !name.endsWith('-ndk27')) {
-            // Attempt to resolve to the NDK27 variant.
-            details.useTarget group: group, name: "${name}-ndk27", version: requested.version
-        }
-    }
-}
-
 group = 'expo.modules.mapboxnavigation'
 version = '0.1.0'
 
@@ -104,6 +84,25 @@ android {
 
 repositories {
   mavenCentral()
+}
+
+// Force all Mapbox dependencies to use -ndk27 variant to match @rnmapbox/maps
+configurations.all {
+    resolutionStrategy.eachDependency { DependencyResolveDetails details ->
+        def requested = details.requested
+        def group = requested.group
+        def name = requested.name
+
+        // Force ndk27 variants for all Mapbox modules when targetSdk >= 35
+        if ((group == 'com.mapbox.maps' || group == 'com.mapbox.plugin' || group == 'com.mapbox.module') &&
+            !name.endsWith('-ndk27')) {
+            
+            def targetSdk = safeExtGet("targetSdkVersion", 28)
+            if (targetSdk >= 35) {
+                details.useTarget group: group, name: "${name}-ndk27", version: requested.version
+            }
+        }
+    }
 }
 
 dependencies {
