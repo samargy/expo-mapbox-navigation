@@ -345,11 +345,14 @@ class ExpoMapboxNavigationViewController: UIViewController {
         calculateRoutesTask?.cancel()
 
         if(currentCoordinates != nil){
+            let coordinatesCount = currentCoordinates!.count
             let waypoints = currentCoordinates!.enumerated().map {
                 let index = $0
                 let coordinate = $1
                 var waypoint = Waypoint(coordinate: coordinate) 
-                waypoint.separatesLegs = currentWaypointIndices == nil ? true : currentWaypointIndices!.contains(index)
+                // Only mark as separate leg if: it's the first, last, or explicitly specified in waypointIndices
+                waypoint.separatesLegs = index == 0 || index == coordinatesCount - 1 || 
+                                        (currentWaypointIndices != nil && currentWaypointIndices!.contains(index))
                 return waypoint
             }
 
@@ -391,6 +394,9 @@ class ExpoMapboxNavigationViewController: UIViewController {
             locale: currentLocale, 
             distanceUnit: currentLocale.usesMetricSystem ? LengthFormatter.Unit.meter : LengthFormatter.Unit.mile
         )
+        
+        // Disable alternative routes for better performance
+        routeOptions.includesAlternativeRoutes = false
 
         // Log the actual API request details
         addDebugLog("Route options locale: \(routeOptions.locale)")

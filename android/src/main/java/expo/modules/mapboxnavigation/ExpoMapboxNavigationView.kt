@@ -955,6 +955,7 @@ class ExpoMapboxNavigationView(context: Context, appContext: AppContext) :
                         .language(currentLocale.toLanguageTag())
                         .maxHeight(vehicleMaxHeight ?: null)
                         .maxWidth(vehicleMaxWidth ?: null)
+                        .alternatives(false) // Disable alternative routes for better performance
 
         if (currentWaypointIndices != null) {
             optionsBuilder = optionsBuilder.waypointIndicesList(currentWaypointIndices!!)
