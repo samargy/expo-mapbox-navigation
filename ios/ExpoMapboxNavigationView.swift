@@ -243,6 +243,36 @@ class ExpoMapboxNavigationViewController: UIViewController {
 
 
     func setCoordinates(coordinates: Array<CLLocationCoordinate2D>) {
+        addDebugLog("setCoordinates called with \(coordinates.count) points")
+        
+        // Log first, last, and any invalid coordinates
+        if coordinates.count > 0 {
+            addDebugLog("First coord: lat=\(coordinates[0].latitude), lng=\(coordinates[0].longitude)")
+            addDebugLog("Last coord: lat=\(coordinates[coordinates.count-1].latitude), lng=\(coordinates[coordinates.count-1].longitude)")
+            
+            // Check for invalid coordinates
+            var invalidCount = 0
+            for (index, coord) in coordinates.enumerated() {
+                if !CLLocationCoordinate2DIsValid(coord) {
+                    addDebugLog("❌ Invalid coord at index \(index): lat=\(coord.latitude), lng=\(coord.longitude)")
+                    invalidCount += 1
+                }
+                // Check for suspicious values
+                if abs(coord.latitude) > 90 || abs(coord.longitude) > 180 {
+                    addDebugLog("⚠️ Out of range coord at index \(index): lat=\(coord.latitude), lng=\(coord.longitude)")
+                }
+                // Check for zero/null island
+                if coord.latitude == 0 && coord.longitude == 0 {
+                    addDebugLog("⚠️ Null island coord at index \(index)")
+                }
+            }
+            
+            if invalidCount > 0 {
+                addDebugLog("❌ Total invalid coordinates: \(invalidCount)/\(coordinates.count)")
+                lastError = "Invalid coordinates detected: \(invalidCount)/\(coordinates.count)"
+            }
+        }
+        
         currentCoordinates = coordinates
         update()
     }
@@ -333,6 +363,20 @@ class ExpoMapboxNavigationViewController: UIViewController {
 
     func calculateRoutes(waypoints: Array<Waypoint>){
         addDebugLog("calculateRoutes() called with \(waypoints.count) waypoints")
+        
+        // Log waypoint details
+        for (index, waypoint) in waypoints.enumerated() {
+            let coord = waypoint.coordinate
+            addDebugLog("Waypoint \(index): lat=\(coord.latitude), lng=\(coord.longitude), separatesLegs=\(waypoint.separatesLegs)")
+        }
+        
+        // Log route options
+        addDebugLog("Route profile: \(currentRouteProfile ?? "default")")
+        addDebugLog("Exclude list: \(currentRouteExcludeList?.joined(separator: ",") ?? "none")")
+        addDebugLog("Vehicle max height: \(vehicleMaxHeight ?? 0.0)")
+        addDebugLog("Vehicle max width: \(vehicleMaxWidth ?? 0.0)")
+        addDebugLog("Locale: \(currentLocale.identifier)")
+        
         routeCalculationCount += 1
         navigationState = "calculating_route"
         
@@ -348,11 +392,28 @@ class ExpoMapboxNavigationViewController: UIViewController {
             distanceUnit: currentLocale.usesMetricSystem ? LengthFormatter.Unit.meter : LengthFormatter.Unit.mile
         )
 
+        // Log the actual API request details
+        addDebugLog("Route options locale: \(routeOptions.locale)")
+        addDebugLog("Route options distance unit: \(routeOptions.distanceUnit)")
+
         calculateRoutesTask = Task {
-            addDebugLog("Starting route calculation")
+            addDebugLog("📡 Sending route calculation request to Mapbox API...")
+            let startTime = Date()
+            
             switch await self.routingProvider!.calculateRoutes(options: routeOptions).result {
             case .failure(let error):
-                addDebugLog("Route calculation failed: \(error.localizedDescription)")
+                let duration = Date().timeIntervalSince(startTime)
+                addDebugLog("❌ Route calculation failed after \(String(format: "%.2f", duration))s")
+                addDebugLog("Error type: \(type(of: error))")
+                addDebugLog("Error description: \(error.localizedDescription)")
+                
+                // Log more error details if available
+                if let nsError = error as NSError? {
+                    addDebugLog("Error code: \(nsError.code)")
+                    addDebugLog("Error domain: \(nsError.domain)")
+                    addDebugLog("Error userInfo: \(nsError.userInfo)")
+                }
+                
                 lastError = error.localizedDescription
                 navigationState = "route_error"
                 onRouteFailedToLoad?([
@@ -360,7 +421,27 @@ class ExpoMapboxNavigationViewController: UIViewController {
                 ])
                 print(error.localizedDescription)
             case .success(let navigationRoutes):
-                addDebugLog("Route calculation succeeded: \(navigationRoutes.mainRoute.route.legs.count) legs")
+                let duration = Date().timeIntervalSince(startTime)
+                addDebugLog("✅ Route calculation succeeded in \(String(format: "%.2f", duration))s")
+                addDebugLog("Main route legs: \(navigationRoutes.mainRoute.route.legs.count)")
+                addDebugLog("Alternative routes: \(navigationRoutes.alternativeRoutes.count)")
+                
+                // Log route details
+                let mainRoute = navigationRoutes.mainRoute.route
+                addDebugLog("Route distance: \(String(format: "%.0f", mainRoute.distance))m")
+                addDebugLog("Route duration: \(String(format: "%.0f", mainRoute.expectedTravelTime))s")
+                
+                // Log legs info
+                for (index, leg) in mainRoute.legs.enumerated() {
+                    addDebugLog("Leg \(index): distance=\(String(format: "%.0f", leg.distance))m, duration=\(String(format: "%.0f", leg.expectedTravelTime))s")
+                    if let source = leg.source {
+                        addDebugLog("  Source: lat=\(source.coordinate.latitude), lng=\(source.coordinate.longitude)")
+                    }
+                    if let dest = leg.destination {
+                        addDebugLog("  Dest: lat=\(dest.coordinate.latitude), lng=\(dest.coordinate.longitude)")
+                    }
+                }
+                
                 navigationState = "route_calculated"
                 onRoutesCalculated(navigationRoutes: navigationRoutes)
             }
@@ -369,6 +450,17 @@ class ExpoMapboxNavigationViewController: UIViewController {
 
     func calculateMapMatchingRoutes(waypoints: Array<Waypoint>){
         addDebugLog("calculateMapMatchingRoutes() called with \(waypoints.count) waypoints")
+        
+        // Log waypoint details for map matching
+        for (index, waypoint) in waypoints.enumerated() {
+            let coord = waypoint.coordinate
+            addDebugLog("MapMatch Waypoint \(index): lat=\(coord.latitude), lng=\(coord.longitude), separatesLegs=\(waypoint.separatesLegs)")
+        }
+        
+        addDebugLog("Map matching route profile: \(currentRouteProfile ?? "default")")
+        addDebugLog("Map matching exclude list: \(currentRouteExcludeList?.joined(separator: ",") ?? "none")")
+        addDebugLog("Map matching locale: \(currentLocale.identifier)")
+        
         routeCalculationCount += 1
         navigationState = "calculating_map_matching_route"
         
@@ -380,12 +472,27 @@ class ExpoMapboxNavigationViewController: UIViewController {
         )
         matchOptions.locale = currentLocale
 
+        addDebugLog("Map matching options locale: \(matchOptions.locale)")
+        addDebugLog("Map matching options distance unit: \(matchOptions.distanceUnit)")
 
         calculateRoutesTask = Task {
-            addDebugLog("Starting map matching route calculation")
+            addDebugLog("📡 Sending map matching request to Mapbox API...")
+            let startTime = Date()
+            
             switch await self.routingProvider!.calculateRoutes(options: matchOptions).result {
             case .failure(let error):
-                addDebugLog("Map matching route calculation failed: \(error.localizedDescription)")
+                let duration = Date().timeIntervalSince(startTime)
+                addDebugLog("❌ Map matching failed after \(String(format: "%.2f", duration))s")
+                addDebugLog("MapMatch Error type: \(type(of: error))")
+                addDebugLog("MapMatch Error description: \(error.localizedDescription)")
+                
+                // Log more error details for map matching
+                if let nsError = error as NSError? {
+                    addDebugLog("MapMatch Error code: \(nsError.code)")
+                    addDebugLog("MapMatch Error domain: \(nsError.domain)")
+                    addDebugLog("MapMatch Error userInfo: \(nsError.userInfo)")
+                }
+                
                 lastError = error.localizedDescription
                 navigationState = "route_error"
                 onRouteFailedToLoad?([
@@ -393,7 +500,16 @@ class ExpoMapboxNavigationViewController: UIViewController {
                 ])
                 print(error.localizedDescription)
             case .success(let navigationRoutes):
-                addDebugLog("Map matching route calculation succeeded: \(navigationRoutes.mainRoute.route.legs.count) legs")
+                let duration = Date().timeIntervalSince(startTime)
+                addDebugLog("✅ Map matching succeeded in \(String(format: "%.2f", duration))s")
+                addDebugLog("MapMatch Main route legs: \(navigationRoutes.mainRoute.route.legs.count)")
+                addDebugLog("MapMatch Alternative routes: \(navigationRoutes.alternativeRoutes.count)")
+                
+                // Log map matching route details
+                let mainRoute = navigationRoutes.mainRoute.route
+                addDebugLog("MapMatch Route distance: \(String(format: "%.0f", mainRoute.distance))m")
+                addDebugLog("MapMatch Route duration: \(String(format: "%.0f", mainRoute.expectedTravelTime))s")
+                
                 navigationState = "route_calculated"
                 onRoutesCalculated(navigationRoutes: navigationRoutes)
             }
@@ -436,7 +552,10 @@ class ExpoMapboxNavigationViewController: UIViewController {
     }
 
     func onRoutesCalculated(navigationRoutes: NavigationRoutes){
-        addDebugLog("onRoutesCalculated called - starting navigation UI setup")
+        addDebugLog("=== onRoutesCalculated - Beginning Navigation Setup ===")
+        addDebugLog("Current state before setup: \(navigationState)")
+        addDebugLog("NavigationViewController exists: \(navigationViewController != nil)")
+        
         navigationState = "setting_up_navigation"
         
         onRoutesLoaded?([
@@ -461,13 +580,18 @@ class ExpoMapboxNavigationViewController: UIViewController {
         )
 
         let newNavigationControllerRequired = navigationViewController == nil
+        addDebugLog("New controller required: \(newNavigationControllerRequired)")
 
         if(newNavigationControllerRequired){
+            addDebugLog("Creating new NavigationViewController")
             navigationViewController = NavigationViewController(
                 navigationRoutes: navigationRoutes,
                 navigationOptions: navigationOptions
             )
+            addDebugLog("NavigationViewController created at address: \(Unmanaged.passUnretained(navigationViewController!).toOpaque())")
         } else {
+            addDebugLog("Reusing existing NavigationViewController")
+            addDebugLog("Existing controller address: \(Unmanaged.passUnretained(navigationViewController!).toOpaque())")
             navigationViewController!.prepareViewLoading(
                 navigationRoutes: navigationRoutes,
                 navigationOptions: navigationOptions
@@ -508,10 +632,12 @@ class ExpoMapboxNavigationViewController: UIViewController {
             navigationViewController.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: 0),
         ])
         didMove(toParent: self)
+        addDebugLog("Starting active guidance...")
         mapboxNavigation!.tripSession().startActiveGuidance(with: navigationRoutes, startLegIndex: 0)
         
         navigationState = "active_navigation"
-        addDebugLog("Active guidance started - navigation setup complete")
+        addDebugLog("=== Navigation Setup Complete ===")
+        addDebugLog("Final state: \(navigationState)")
         viewLifecycleState = "navigating"
     }
 }
