@@ -94,7 +94,7 @@ configurations.all {
         def name = requested.name
 
         // Force ndk27 variants for all Mapbox modules when targetSdk >= 35
-        if ((group == 'com.mapbox.maps' || group == 'com.mapbox.plugin' || group == 'com.mapbox.module') &&
+        if ((group == 'com.mapbox.maps' || group == 'com.mapbox.plugin' || group == 'com.mapbox.module' || group == 'com.mapbox.common') &&
             !name.endsWith('-ndk27')) {
             
             def targetSdk = safeExtGet("targetSdkVersion", 28)
