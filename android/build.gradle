@@ -94,20 +94,17 @@ dependencies {
   implementation "com.google.android.gms:play-services-location:21.0.1"
   implementation "androidx.constraintlayout:constraintlayout:2.2.0-alpha13"
   
-  // Explicitly force ndk27 variants to override transitive dependencies from Navigation SDK
-  // This ensures compatibility with @rnmapbox/maps when targetSdk >= 35
-  def targetSdk = safeExtGet("targetSdkVersion", 28)
-  if (targetSdk >= 35) {
-    implementation "com.mapbox.maps:android-ndk27:11.11.0"
-    implementation "com.mapbox.maps:base-ndk27:11.11.0"
-    implementation "com.mapbox.common:common-ndk27:24.11.0"
-    implementation "com.mapbox.plugin:maps-gestures-ndk27:11.11.0"
-    implementation "com.mapbox.plugin:maps-lifecycle-ndk27:11.11.0"
-    implementation "com.mapbox.plugin:maps-locationcomponent-ndk27:11.11.0"
-    implementation "com.mapbox.plugin:maps-logo-ndk27:11.11.0"
-    implementation "com.mapbox.plugin:maps-overlay-ndk27:11.11.0"
-    implementation "com.mapbox.plugin:maps-scalebar-ndk27:11.11.0"
-    implementation "com.mapbox.plugin:maps-viewport-ndk27:11.11.0"
-    implementation "com.mapbox.module:maps-telemetry-ndk27:11.11.0"
-  }
+  // Always force ndk27 variants to override transitive dependencies from Navigation SDK
+  // This ensures compatibility with @rnmapbox/maps which uses ndk27 for modern Android SDKs
+  implementation "com.mapbox.maps:android-ndk27:11.11.0"
+  implementation "com.mapbox.maps:base-ndk27:11.11.0"
+  implementation "com.mapbox.common:common-ndk27:24.11.0"
+  implementation "com.mapbox.plugin:maps-gestures-ndk27:11.11.0"
+  implementation "com.mapbox.plugin:maps-lifecycle-ndk27:11.11.0"
+  implementation "com.mapbox.plugin:maps-locationcomponent-ndk27:11.11.0"
+  implementation "com.mapbox.plugin:maps-logo-ndk27:11.11.0"
+  implementation "com.mapbox.plugin:maps-overlay-ndk27:11.11.0"
+  implementation "com.mapbox.plugin:maps-scalebar-ndk27:11.11.0"
+  implementation "com.mapbox.plugin:maps-viewport-ndk27:11.11.0"
+  implementation "com.mapbox.module:maps-telemetry-ndk27:11.11.0"
 }
