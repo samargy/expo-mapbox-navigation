@@ -89,13 +89,26 @@ repositories {
 dependencies {
   def lifecycle_version = "2.8.1"
   implementation project(':expo-modules-core')
-  implementation "com.mapbox.navigationcore:android:3.8.0"
-  implementation "com.mapbox.navigationcore:ui-components:3.8.0"
+  
+  // Navigation SDK with exclusions to prevent standard variant conflicts
+  implementation("com.mapbox.navigationcore:android:3.8.0") {
+    exclude group: 'com.mapbox.maps'
+    exclude group: 'com.mapbox.common'
+    exclude group: 'com.mapbox.plugin'
+    exclude group: 'com.mapbox.module'
+  }
+  
+  implementation("com.mapbox.navigationcore:ui-components:3.8.0") {
+    exclude group: 'com.mapbox.maps'
+    exclude group: 'com.mapbox.common'
+    exclude group: 'com.mapbox.plugin'
+    exclude group: 'com.mapbox.module'
+  }
+  
   implementation "com.google.android.gms:play-services-location:21.0.1"
   implementation "androidx.constraintlayout:constraintlayout:2.2.0-alpha13"
   
-  // Always force ndk27 variants to override transitive dependencies from Navigation SDK
-  // This ensures compatibility with @rnmapbox/maps which uses ndk27 for modern Android SDKs
+  // Force ndk27 variants for compatibility with @rnmapbox/maps
   implementation "com.mapbox.maps:android-ndk27:11.11.0"
   implementation "com.mapbox.maps:base-ndk27:11.11.0"
   implementation "com.mapbox.common:common-ndk27:24.11.0"
